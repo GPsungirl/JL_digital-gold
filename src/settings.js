@@ -1,6 +1,6 @@
 module.exports = {
 
-  title: '角落里管理平台',
+  title: '数字黄金管理平台',
 
   /**
    * @type {boolean} true | false
