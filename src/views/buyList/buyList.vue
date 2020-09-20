@@ -79,6 +79,12 @@
         <el-table-column prop="account_no" label="数字钱包" width="" :show-overflow-tooltip="true"></el-table-column>
         <el-table-column prop="createtime" label="创建时间" :show-overflow-tooltip="true" width="110"></el-table-column>
         <el-table-column prop="digit_num" label="购买数量" :show-overflow-tooltip="true" width=""></el-table-column>
+        <!-- 原始单价 -->
+        <el-table-column prop="" label="原始单价(元)" :show-overflow-tooltip="true" width="">
+          <template slot-scope="scope">
+            <span>{{ scope.row.deal_single_price/100  }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="" label="单价(元)" :show-overflow-tooltip="true" width="">
           <template slot-scope="scope">
             <span>{{ scope.row.single_price/100  }}</span>
@@ -155,8 +161,8 @@
 
             <el-button v-if="scope.row.amount_status == 0 && scope.row.order_status != 2"  @click="handle_store(scope.row)" type="text" size="small">放币</el-button>
 
-            <el-button v-if="scope.row.pre_amount_status == 0 && scope.row.order_status != 2"  @click="handle_returnM(scope.row)" type="text" size="small">返预付</el-button>
-            <el-button v-if="scope.row.pre_amount_status != 0 && scope.row.order_status != 2" @click="handle_viewRM(scope.row)" type="text" size="small">查看返预付</el-button>
+            <el-button v-if="scope.row.pre_amount_status == 0 && scope.row.order_status != 2"  @click="handle_returnM(scope.row)" type="text" size="small">实际成交量</el-button>
+            <el-button v-if="scope.row.pre_amount_status != 0 && scope.row.order_status != 2" @click="handle_viewRM(scope.row)" type="text" size="small">查看实际成交量</el-button>
 
 
             <el-button v-show="scope.row.amount_status != 1 || scope.row.pre_amount_status !=1" v-if="scope.row.deal_status == 1 && scope.row.order_status != 2" @click="handle_break(scope.row)" type="text" size="small">终止</el-button>
@@ -239,9 +245,9 @@
           <el-button type="primary" v-if="fail_form.showFailR" @click="fail_resolve" size="mini">确 定</el-button>
         </span>
     </el-dialog>
-    <!-- M5 修改/查看 返预付 -->
+    <!-- M5 修改/查看 实际成交量 -->
     <el-dialog
-      title="返预付"
+      title="实际成交量"
       :visible.sync="return_dialogVisible"
       width="30%"
       center
@@ -260,15 +266,15 @@
         class="demo-form-inline"
         label-width="120px"
         >
-        <p><span>买入交易单价</span><span>{{return_form.pre_total_price / 100}}</span>元</p>
+        <p><span>买入交易单价</span><span>{{return_form.single_price / 100}}</span>元</p>
         <el-form-item label="实际交易单价" prop="deal_single_price" >
           <el-input :disabled="!return_form.showReturnR" v-model="return_form.deal_single_price" placeholder="实际交易单价" class="wid_140"></el-input>
           <span> 元</span>
         </el-form-item>
-        <p class="tipError" v-show="tipError">当前交易单价超出预付费金额</p>
-        <el-form-item label="返预付费价格" prop="deal_pre_total_price" >
+        <p class="tipError" v-show="tipError">{{ tipMsg }}</p>
+        <el-form-item label="实际成交量" prop="deal_pre_total_price" >
           <el-input :disabled="true" v-model="deal_pre_total_price"  class="wid_140"></el-input>
-          <span> 元</span>
+          <span>个</span>
         </el-form-item>
         <!-- <p><span>返预付费价格：</span><span>{{ deal_pre_total_price }}</span></p> -->
 
@@ -348,7 +354,8 @@ import {
   getFloat,
   myIsNaN,
   validFloat2,
-  calcuReturn
+  calcuReturn,
+  save2num
 } from "../../utils/validate";
 import axios from "axios";
 export default {
@@ -386,6 +393,7 @@ export default {
       }
     }
     return {
+      tipMsg:'',
       // 创建时间
       pickerOptions_register1: {
         disabledDate: time => {
@@ -535,13 +543,19 @@ export default {
     deal_pre_total_price:{
       get:function(){
         if(this.return_form.deal_single_price){
-          let val = (this.return_form.pre_total_price - this.return_form.deal_single_price*100)
-          if(calcuReturn(val)){
+          let val = (this.return_form.total_amount/this.return_form.deal_single_price)          
+          // let val = (this.return_form.pre_total_price - this.return_form.deal_single_price*100)
+          // console.log(`实际成交价格：${this.return_form.deal_single_price*100}；交易单价：${this.return_form.single_price}`)
+          if((this.return_form.deal_single_price*100-this.return_form.single_price<=1)){
+            
             this.tipError = false;
-            return Math.floor(val*this.return_form.digit_num) / 100;
+            return save2num(val/100,'sell')
           }else{
+            
+            this.tipMsg = '最高允许成交价为'+ save2num((this.return_form.single_price/100 + 0.01),'sell')
             // 给出提示，隐藏确认按钮
             this.tipError = true;
+
           }
         }
       },
@@ -721,7 +735,7 @@ export default {
 
 
 
-    // 操作-查看返预付
+    // 操作-查看实际成交量
     handle_viewRM(row){
       this.return_dialogVisible = true;
       this.return_form.showReturnR = false;
@@ -732,6 +746,7 @@ export default {
           orderid: row.orderid,
         }
       };
+     
       this.return_loading = true;
       this.$http
       .post(`${commonUrl.baseUrl}/orderInfo/selectOrderInfo`, param)
@@ -739,9 +754,10 @@ export default {
 
         if (res.data.code == "0000") {
           let result = res.data.data.orderInfo;
-          this.return_form.single_price = result.single_price ;
+          this.return_form.single_price = result.single_price ;           
           this.return_form.deal_single_price = result.deal_single_price / 100;
-          // this.deal_pre_total_price = result.deal_pre_total_price / 100;
+          this.return_form.total_amount = result.total_amount
+          // this.deal_pre_total_price = result.digit_num;
           this.return_loading = false;
 
         }else{
@@ -758,6 +774,7 @@ export default {
       this.return_form.showReturnR = true;
       this.return_form.orderid = row.orderid
       this.return_form.digit_num = row.digit_num
+      this.return_form.total_amount = row.total_amount
       // 买入时单价
       this.return_form.single_price = row.single_price
       // 买入时总价
@@ -767,7 +784,7 @@ export default {
       this.return_form.phone = row.phone
 
     },
-    // 提交-返预付
+    // 提交-实际成交
     return_resolve(){
       if(this.m_valid_addForm('return_form')){
         let param = {
@@ -775,11 +792,18 @@ export default {
             signInUserId: this.$store.getters.userId,
             signInRoleId: this.$store.getters.roleId,
             orderid:this.return_form.orderid,
-            deal_single_price:this.return_form.deal_single_price*100,
+            
             pre_amount_status:this.return_form.pre_amount_status,
             username:this.return_form.username,
             phone:this.return_form.phone,
-            deal_pre_total_price:this.deal_pre_total_price*100,
+            // deal_pre_total_price:this.deal_pre_total_price*100,
+            // deal_single_price:this.return_form.deal_single_price*100,
+            deal_single_price:this.return_form.deal_single_price*100,
+            // 原始数量
+            src_digit_num:this.return_form.digit_num,
+            // 实际成交数量
+            digit_num:this.deal_pre_total_price,
+            order_type:0,
             // pre_total_price:this.return_form.pre_total_price,
             // digit_num:this.return_form.digit_num,
 

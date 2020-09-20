@@ -79,11 +79,25 @@
         <el-table-column prop="account_no" label="银行卡号" width="180"></el-table-column>
         <el-table-column prop="createtime" label="创建时间" :show-overflow-tooltip="true" width="110"></el-table-column>
         <el-table-column prop="digit_num" label="卖出数量" :show-overflow-tooltip="true" width="80"></el-table-column>
+        <!-- 原始单价 -->
         <el-table-column prop="" label="单价(元)" :show-overflow-tooltip="true" width="">
           <template slot-scope="scope">
             <span>{{ scope.row.single_price/100  }}</span>
           </template>
         </el-table-column>
+        <!-- 实际交易单价(元) -->
+        <el-table-column prop="" label="实际成交单价(元)" :show-overflow-tooltip="true" width="">
+          <template slot-scope="scope">
+            <span>{{ scope.row.deal_single_price/100  }}</span>
+          </template>
+        </el-table-column>
+        <!-- 原始总金额 -->
+         <el-table-column prop="" label="原始总金额(元)" :show-overflow-tooltip="true" width="100">
+          <template slot-scope="scope">
+            <span>{{ scope.row.deal_pre_total_price / 100  }}</span>
+          </template>
+        </el-table-column>
+        <!-- 现在总金额 -->
         <el-table-column prop="" label="总金额(元)" :show-overflow-tooltip="true" width="100">
           <template slot-scope="scope">
             <span>{{ scope.row.total_amount / 100  }}</span>
@@ -142,15 +156,15 @@
             <span v-if="scope.row.order_status == 3">交易超时</span>
           </template>
         </el-table-column> -->
-        <el-table-column prop label="操作" width="220">
+        <el-table-column prop label="操作" fixed="right" width="220">
           <template slot-scope="scope">
             <el-button v-if="scope.row.order_status == 2" @click="handle_viewFail(scope.row)" type="text" size="small">查看失败</el-button>
             <el-button v-else @click="handle_fail(scope.row)" type="text" size="small">交易失败</el-button>
 
             <el-button v-if="scope.row.amount_status == 0 && scope.row.order_status != 2"  @click="handle_store(scope.row)" type="text" size="small">放款</el-button>
 
-            <el-button v-if="scope.row.pre_amount_status == 0 && scope.row.order_status != 2"  @click="handle_returnM(scope.row)" type="text" size="small">返预扣</el-button>
-            <el-button v-if="scope.row.pre_amount_status != 0 && scope.row.order_status != 2" @click="handle_viewRM(scope.row)" type="text" size="small">查看返预扣</el-button>
+            <el-button v-if="scope.row.pre_amount_status == 0 && scope.row.order_status != 2"  @click="handle_returnM(scope.row)" type="text" size="small">实际成交价</el-button>
+            <el-button v-if="scope.row.pre_amount_status != 0 && scope.row.order_status != 2" @click="handle_viewRM(scope.row)" type="text" size="small">查看实际成交价</el-button>
 
             <el-button v-show="scope.row.amount_status != 1 || scope.row.pre_amount_status !=1" v-if="scope.row.deal_status == 1 && scope.row.order_status != 2" @click="handle_break(scope.row)" type="text" size="small">终止</el-button>
             <el-button v-show="scope.row.amount_status != 1 || scope.row.pre_amount_status !=1" v-if="scope.row.deal_status != 1 && scope.row.order_status != 2" @click="handle_viewBR(scope.row)" type="text" size="small">终止原因</el-button>
@@ -234,9 +248,9 @@
     </el-dialog>
 
 
-    <!-- M5 修改/查看 返预扣 -->
+    <!-- M5 修改/查看 实际成交价 -->
     <el-dialog
-      title="返预扣"
+      title="卖出实际成交价"
       :visible.sync="return_dialogVisible"
       width="30%"
       center
@@ -255,13 +269,13 @@
         class="demo-form-inline"
         label-width="120px"
         >
-        <p><span>买入交易单价</span><span>{{return_form.pre_total_price / 100}}</span>元</p>
-        <el-form-item label="实际交易单价" prop="deal_single_price" >
+        <p><span>提交订单时的卖出价格：</span><span>{{return_form.single_price / 100}}</span>元</p>
+        <el-form-item label="实际成交价" prop="deal_single_price" >
           <el-input :disabled="!return_form.showReturnR" v-model="return_form.deal_single_price" placeholder="实际交易单价" class="wid_140"></el-input>
           <span> 元</span>
         </el-form-item>
-        <p class="tipError" v-show="tipError">当前交易单价超出预扣费金额</p>
-        <el-form-item label="返预扣费价格" prop="deal_pre_total_price" >
+        <p class="tipError" v-show="tipError">{{ tipMsg }}</p>
+        <el-form-item label="实际价格" prop="deal_pre_total_price" >
           <el-input :disabled="true" v-model="deal_pre_total_price"  class="wid_140"></el-input>
           <span> 元</span>
         </el-form-item>
@@ -342,7 +356,8 @@ import {
   getFloat,
   myIsNaN,
   validFloat2,
-  calcuReturn
+  calcuReturn,
+  save2num
 } from "../../utils/validate";
 import axios from "axios";
 export default {
@@ -380,6 +395,7 @@ export default {
       }
     }
     return {
+      tipMsg:"",
       // 创建时间
       pickerOptions_register1: {
         disabledDate: time => {
@@ -532,12 +548,13 @@ export default {
     deal_pre_total_price:{
       get:function(){
         if(this.return_form.deal_single_price){
-          let val = (this.return_form.deal_single_price*100 - this.return_form.pre_total_price)
-          if(calcuReturn(val)){
+          let val = (this.return_form.single_price - this.return_form.deal_single_price*100<=1)
+          if(val){
             this.tipError = false;
-            return Math.floor(val*this.return_form.digit_num ) / 100;
+            return save2num(this.return_form.deal_single_price*this.return_form.digit_num,'sell')
           }else{
             // 给出提示，隐藏确认按钮
+            this.tipMsg = '最低允许成交价为：'+ (this.return_form.single_price-1)/100
             this.tipError = true;
           }
         }
@@ -716,7 +733,7 @@ export default {
 
 
 
-    // 操作-查看返预扣
+    // 操作-查看实际成交金额
     handle_viewRM(row){
       this.return_dialogVisible = true;
       this.return_form.showReturnR = false;
@@ -734,6 +751,8 @@ export default {
 
         if (res.data.code == "0000") {
           let result = res.data.data.orderInfo;
+          this.return_form.single_price = result.single_price
+          this.return_form.digit_num = result.digit_num
           this.return_form.deal_single_price = result.deal_single_price / 100;
           this.return_loading = false;
         }else{
@@ -743,7 +762,7 @@ export default {
       })
       .catch(err => {});
     },
-    // 操作-返预扣
+    // 操作-实际成交金额
     handle_returnM(row) {
       this.return_dialogVisible = true;
       this.resetData('return_form')
@@ -751,6 +770,7 @@ export default {
       this.return_form.orderid = row.orderid,
       this.return_form.digit_num = row.digit_num,
       this.return_form.pre_total_price = row.pre_total_price
+      this.return_form.total_amount = row.total_amount
        // 买入时单价
       this.return_form.single_price = row.single_price
 
@@ -758,7 +778,7 @@ export default {
       this.return_form.username = row.username
       this.return_form.phone = row.phone
     },
-    // 提交-返预扣
+    // 提交-实际成交价
     return_resolve(){
       if(this.m_valid_addForm('return_form')){
         let param = {
@@ -772,7 +792,9 @@ export default {
             // digit_num:this.return_form.digit_num,
             username:this.return_form.username,
             phone:this.return_form.phone,
-            deal_pre_total_price:this.deal_pre_total_price*100,
+            order_type:1,
+            total_amount:save2num(this.deal_pre_total_price*100,'sell'),
+            deal_pre_total_price:this.return_form.total_amount
           }
         };
         this.return_loading = true;

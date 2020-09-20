@@ -1240,9 +1240,13 @@ export default {
       // 处理后台传递的参数HHmmss=>HH:mm:ss
       formatDate(date){
         date = String(date);
-        if(date.length == 5){
-          date = '0'+date;
+        let zarr = ['0','0','0','0','0','0']
+        if(date.length<6){
+          date = zarr.slice(0,6-date.length).join('')+date               
         }
+        // if(date.length == 5){
+        //   date = '0'+date;
+        // }
         if(date.length == 6){
           let today = new Date();
           let YYYY = today.getFullYear();

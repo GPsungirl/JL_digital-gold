@@ -173,3 +173,31 @@ export function calcuReturn(val){
   val = Number(val);
   return val>=0;
 }
+
+
+
+
+// 计算小数点后两位的数字取舍问题
+export  function save2num(val,type) {
+  var val_num = Number(val);
+  var val_str = val + '';
+  // 判定是否是小数
+  var flag1 = val_str.indexOf('.') > -1;
+  // 若是小数，判定是否多于两位
+  var flag2 = false;
+  if (flag1) {
+      flag2 = val_str.split('.')[1].length > 2;
+  }
+  if (flag1 && flag2) { //如果是小数且位数多于两位
+      var _val_numf;
+      if(type=='sell'){//卖出的时候舍去第三位小数
+          _val_numf = Number((val_num * 100 + '').split('.')[0]) ;
+      }else{ //买入的时候第三位进位
+          _val_numf = Number((val_num * 100 + '').split('.')[0]) + 1;
+      }
+      
+      return _val_numf / 100;
+  } else {
+      return val_num;
+  }
+}
